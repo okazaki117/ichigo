@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>いちご狩りゲーム</title>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- タイトル画面 -->
+        <div id="screen-title" class="screen active">
+            <h1>いちご狩り🍓</h1>
+            <p>たくさんいちごを収穫しよう！<br>
+            青いいちごや虫付きはタップしちゃダメだよ！</p>
+            <div class="legend">
+                <div class="legend-item"><span class="emoji normal">🍓</span> 100 pt</div>
+                <div class="legend-item"><span class="emoji big">🍓</span> 300 pt</div>
+                <div class="legend-item"><span class="emoji white">🍓</span> 500 pt</div>
+                <div class="legend-item"><span class="emoji blue">🍓</span> -100 pt</div>
+                <div class="legend-item"><span class="emoji bug">🍓</span> -300 pt</div>
+            </div>
+            <button id="btn-start" class="btn">ゲームスタート！</button>
+        </div>
+
+        <!-- ゲーム画面 -->
+        <div id="screen-game" class="screen">
+            <div id="hud">
+                <div class="hud-item">残り時間: <span id="timer">30</span>秒</div>
+                <div class="hud-item">スコア: <span id="score">0</span></div>
+            </div>
+            <div id="play-area"></div>
+        </div>
+
+        <!-- 結果画面 -->
+        <div id="screen-result" class="screen">
+            <h2>終了！</h2>
+            <p>あなたのスコアは...</p>
+            <div id="final-score">0</div>
+            <p id="rank-message">ランク：ノービス</p>
+            <button id="btn-retry" class="btn">もう一度あそぶ</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
