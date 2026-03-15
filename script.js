@@ -11,32 +11,60 @@ const ELEMENTS = {
     scoreValue: document.getElementById('score'),
     playArea: document.getElementById('play-area'),
     finalScore: document.getElementById('final-score'),
-    rankMessage: document.getElementById('rank-message')
+    rankMessage: document.getElementById('rank-message'),
+    basket: document.getElementById('basket')
 };
 
-// ゲーム設定
+/* --- ゲームステータス --- */
 const GAME_DURATION = 30; // 30秒
-const SPAWN_INTERVAL_BASE = 800; // いちごが湧く基本間隔(ms)
-
 let score = 0;
 let timeLeft = 0;
-let gameTimer = null;
-let spawnTimer = null;
 let isPlaying = false;
+let gameTimerInterval = null;
+let animationFrameId = null;
+let lastSpawnTime = 0;
 
-// いちごの種類定義
+// マウス/タッチの座標 (カゴの位置)
+let cursorX = 300;
+let cursorY = 500;
+
+// 落下中のエンティティ（いちご・ハチ）のデータ配列
+let fallingEntities = [];
+
+/* --- アイテム種類定義 --- */
 // 確率を加重して決定するための配列
-const STRAWBERRY_TYPES = [
-    { type: 'normal', emoji: '🍓', points: 100, class: 'normal', weight: 60, duration: 2000 },
-    { type: 'big', emoji: '🍓', points: 300, class: 'big', weight: 15, duration: 2500 },
-    { type: 'white', emoji: '🍓', points: 500, class: 'white', weight: 5, duration: 1500 },
-    { type: 'blue', emoji: '🍓', points: -100, class: 'blue', weight: 15, duration: 2000 },
-    { type: 'bug', emoji: '🍓', points: -300, class: 'bug', weight: 5, duration: 2500 },
+const SPAWN_TYPES = [
+    { type: 'normal', emoji: '🍓', points: 100, class: 'normal', weight: 60, speedBase: 3 },
+    { type: 'big', emoji: '🍓', points: 300, class: 'big', weight: 15, speedBase: 2.5 },
+    { type: 'white', emoji: '🍓', points: 500, class: 'white', weight: 5, speedBase: 4 },
+    { type: 'blue', emoji: '🍓', points: -100, class: 'blue', weight: 12, speedBase: 3.5 },
+    { type: 'bug', emoji: '🍓', points: -300, class: 'bug', weight: 5, speedBase: 3.5 },
+    { type: 'bee', emoji: '🐝', points: 'GAMEOVER', class: 'bee', weight: 3, speedBase: 5 },
 ];
+
 
 function initGame() {
     ELEMENTS.btnStart.addEventListener('click', startGame);
     ELEMENTS.btnRetry.addEventListener('click', () => showScreen(SCREENS.TITLE));
+    
+    // マウス移動
+    ELEMENTS.playArea.addEventListener('mousemove', (e) => {
+        if (!isPlaying) return;
+        const rect = ELEMENTS.playArea.getBoundingClientRect();
+        cursorX = e.clientX - rect.left;
+        cursorY = e.clientY - rect.top;
+        updateBasketPosition();
+    });
+    
+    // タッチ移動
+    ELEMENTS.playArea.addEventListener('touchmove', (e) => {
+        if (!isPlaying) return;
+        e.preventDefault(); 
+        const rect = ELEMENTS.playArea.getBoundingClientRect();
+        cursorX = e.touches[0].clientX - rect.left;
+        cursorY = e.touches[0].clientY - rect.top;
+        updateBasketPosition();
+    }, {passive: false});
 }
 
 function showScreen(screenToShow) {
@@ -46,18 +74,34 @@ function showScreen(screenToShow) {
     screenToShow.classList.add('active');
 }
 
+function updateBasketPosition() {
+    ELEMENTS.basket.style.left = `${cursorX}px`;
+    ELEMENTS.basket.style.top = `${cursorY}px`;
+}
+
 function startGame() {
     score = 0;
     timeLeft = GAME_DURATION;
     isPlaying = true;
+    fallingEntities.forEach(f => f.element.remove());
+    fallingEntities = [];
+    
     ELEMENTS.scoreValue.textContent = score;
     ELEMENTS.timerValue.textContent = timeLeft;
-    ELEMENTS.playArea.innerHTML = '';
     
     showScreen(SCREENS.GAME);
+    
+    // カーソル初期位置を中央下部に
+    const rect = ELEMENTS.playArea.getBoundingClientRect();
+    cursorX = rect.width / 2;
+    cursorY = rect.height - 100;
+    updateBasketPosition();
 
-    gameTimer = setInterval(updateTimer, 1000);
-    spawnStrawberryLoop();
+    gameTimerInterval = setInterval(updateTimer, 1000);
+    lastSpawnTime = performance.now();
+    
+    // ゲームループ開始
+    animationFrameId = requestAnimationFrame(gameLoop);
 }
 
 function updateTimer() {
@@ -66,30 +110,29 @@ function updateTimer() {
     
     // 時間切れ
     if (timeLeft <= 0) {
-        endGame();
+        endGame('TIMEUP');
     }
 }
 
-function endGame() {
+function endGame(reason) {
     isPlaying = false;
-    clearInterval(gameTimer);
-    clearTimeout(spawnTimer);
+    clearInterval(gameTimerInterval);
+    cancelAnimationFrame(animationFrameId);
     
-    // 残っているいちごをクリック不可能に
-    const strawberries = document.querySelectorAll('.strawberry-entity');
-    strawberries.forEach(s => s.style.pointerEvents = 'none');
+    const isGameOver = reason === 'GAMEOVER';
     
     setTimeout(() => {
-        showResult();
-    }, 1000); // 1秒遅延して結果画面へ
+        showResult(isGameOver);
+    }, 500);
 }
 
-function showResult() {
+function showResult(isGameOver) {
     ELEMENTS.finalScore.textContent = score;
     
     // ランク判定
     let rank = '';
-    if (score < 0) rank = '赤字農家...😢';
+    if (isGameOver) rank = 'ハチに刺されて即終了🐝💦';
+    else if (score < 0) rank = '赤字農家...😢';
     else if (score < 1000) rank = '新米いちごハンター🔰';
     else if (score < 3000) rank = '一人前のいちご農家🍓';
     else if (score < 5000) rank = '熟練のいちごマスター✨';
@@ -99,96 +142,139 @@ function showResult() {
     showScreen(SCREENS.RESULT);
 }
 
-function getRandomStrawberryType() {
-    const totalWeight = STRAWBERRY_TYPES.reduce((sum, type) => sum + type.weight, 0);
+function getRandomType() {
+    const totalWeight = SPAWN_TYPES.reduce((sum, type) => sum + type.weight, 0);
     let randomNum = Math.random() * totalWeight;
-    
-    for (const type of STRAWBERRY_TYPES) {
-        if (randomNum < type.weight) {
-            return type;
-        }
+    for (const type of SPAWN_TYPES) {
+        if (randomNum < type.weight) return type;
         randomNum -= type.weight;
     }
-    return STRAWBERRY_TYPES[0];
+    return SPAWN_TYPES[0];
 }
 
-function spawnStrawberryLoop() {
-    if (!isPlaying) return;
+function spawnEntity() {
+    const rect = ELEMENTS.playArea.getBoundingClientRect();
+    const type = getRandomType();
     
-    spawnStrawberry();
-    
-    // ランダムな間隔で次をスポーン
-    const nextSpawnTime = SPAWN_INTERVAL_BASE * (0.5 + Math.random());
-    spawnTimer = setTimeout(spawnStrawberryLoop, nextSpawnTime);
-}
-
-function spawnStrawberry() {
-    // プレイエリアのサイズを取得
-    const areaRect = ELEMENTS.playArea.getBoundingClientRect();
-    const padding = 50; // 端っこすぎないように
-    
-    const x = padding + Math.random() * (areaRect.width - padding * 2);
-    const y = padding + Math.random() * (areaRect.height - padding * 2);
-    
-    const type = getRandomStrawberryType();
+    // 画面の幅の中でランダムなX座標に配置
+    const padding = 40; 
+    const x = padding + Math.random() * (rect.width - padding * 2);
+    const y = -50; // 画面上部外から
     
     const el = document.createElement('div');
-    el.className = `strawberry-entity ${type.class}`;
+    el.className = `falling-entity ${type.class}`;
     el.textContent = type.emoji;
-    
-    // 配置
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
-    
-    // 大きさによる位置微調整（中心を合わせる）
-    const scale = type.class === 'big' ? 'scale(1.3)' : 'scale(1)';
-    // el.style.transform は、CSSのanimationによる popIn と競合する可能性があるため、
-    // padding等の相対的な調整で処理するか、ラッパー要素を使う方が安全だが、ここでは簡略化。
-    // 代わりにCSSクラスに大きさを委ねる。
-    
-    // クリックイベント
-    el.addEventListener('mousedown', (e) => {
-        if (!isPlaying || el.classList.contains('clicked')) return;
-        
-        el.classList.add('clicked');
-        
-        // スコア加算/減算
-        updateScore(type.points, x, y);
-        
-        // 少し経ってから削除
-        setTimeout(() => el.remove(), 200);
-    });
-    
-    // タッチデバイス対応
-    el.addEventListener('touchstart', (e) => {
-        e.preventDefault(); // mousedownとの重複防止
-        if (!isPlaying || el.classList.contains('clicked')) return;
-        el.classList.add('clicked');
-        updateScore(type.points, x, y);
-        setTimeout(() => el.remove(), 200);
-    }, {passive: false});
-
     ELEMENTS.playArea.appendChild(el);
     
-    // 一定時間経過で自然消滅
-    setTimeout(() => {
-        if (el.parentNode && !el.classList.contains('clicked')) {
-            el.style.animation = 'popOut 0.2s forwards';
-            setTimeout(() => {
-                if(el.parentNode) el.remove();
-            }, 200);
-        }
-    }, type.duration);
+    // スピード算出（時間経過でだんだん早くなる：難易度カーブ）
+    // timeLeft=30 のときはそのまま、timeLeft=0 に近づくにつれ最大1.5倍の速さ
+    const speedMultiplier = 1 + ((GAME_DURATION - Math.max(0, timeLeft)) / GAME_DURATION) * 0.5;
+    
+    // ハチ（🐝）の場合は斜めに動くように設定
+    let vx = 0;
+    if (type.type === 'bee') {
+        vx = (Math.random() - 0.5) * 4; // 左右にブレる
+    }
+    
+    fallingEntities.push({
+        element: el,
+        type: type,
+        x: x,
+        y: y,
+        vx: vx,
+        vy: type.speedBase * speedMultiplier * (0.8 + Math.random() * 0.4), // 速さのばらつき
+        isCaught: false
+    });
 }
 
-function updateScore(points, x, y) {
+function gameLoop(timestamp) {
+    if (!isPlaying) return;
+    
+    // 難易度カーブに基づいたスポーン間隔の計算
+    // 残り時間30秒：約800ms ～ 残り時間0秒：約300ms
+    const baseInterval = 300 + (timeLeft / GAME_DURATION) * 500;
+    
+    if (timestamp - lastSpawnTime > baseInterval * (0.8 + Math.random() * 0.4)) {
+        spawnEntity();
+        lastSpawnTime = timestamp;
+    }
+    
+    updateEntities();
+    checkCollisions();
+    
+    animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+function updateEntities() {
+    const rect = ELEMENTS.playArea.getBoundingClientRect();
+    
+    for (let i = fallingEntities.length - 1; i >= 0; i--) {
+        const entity = fallingEntities[i];
+        
+        entity.x += entity.vx;
+        entity.y += entity.vy;
+        
+        // 画面外（下）に落ちたかチェック
+        if (entity.y > rect.height + 100 || entity.x < -100 || entity.x > rect.width + 100) {
+            entity.element.remove();
+            fallingEntities.splice(i, 1);
+            continue;
+        }
+        
+        // DOM要素の座標更新
+        entity.element.style.left = `${entity.x}px`;
+        entity.element.style.top = `${entity.y}px`;
+    }
+}
+
+function checkCollisions() {
+    // カゴの判定領域 (マウスカーソル位置基準)
+    // カゴの中心(cursorX)から左右30px、上20px下20pxくらいを当たり判定とする
+    const catchRadius = 35;
+    const basketCenterY = cursorY + 10;
+    
+    for (let i = fallingEntities.length - 1; i >= 0; i--) {
+        const entity = fallingEntities[i];
+        if (entity.isCaught) continue;
+        
+        // 距離を計算（簡易的な円形判定）
+        const dx = entity.x - cursorX;
+        const dy = entity.y - basketCenterY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < catchRadius) {
+            // キャッチ成功（またはハチと衝突）
+            handleCatch(entity, i);
+        }
+    }
+}
+
+function handleCatch(entity, index) {
+    entity.isCaught = true;
+    const type = entity.type;
+    
+    if (type.type === 'bee') {
+        // 即ゲームオーバー
+        entity.element.textContent = '💥';
+        entity.element.style.transform = 'scale(2)';
+        endGame('GAMEOVER');
+        return;
+    }
+    
+    // スコア処理
+    const points = type.points;
     score += points;
     ELEMENTS.scoreValue.textContent = score;
     
-    // キラキラエフェクト
-    createSparkles(x, y);
+    createSparkles(entity.x, entity.y);
+    createScorePopup(points, entity.x, entity.y);
     
-    // ポップアップエフェクト作成
+    // 捕まえた要素は消す
+    entity.element.remove();
+    fallingEntities.splice(index, 1);
+}
+
+function createScorePopup(points, x, y) {
     const popup = document.createElement('div');
     popup.className = `score-popup ${points < 0 ? 'negative' : ''}`;
     popup.textContent = points > 0 ? `+${points}` : points;
@@ -197,15 +283,15 @@ function updateScore(points, x, y) {
     popup.style.top = `${y - 30}px`;
     
     ELEMENTS.playArea.appendChild(popup);
-    
-    setTimeout(() => popup.remove(), 800);
+    setTimeout(() => { if (popup.parentNode) popup.remove(); }, 800);
 }
 
 /* 背景デコレーション */
 function createDecoration() {
+    if (!isPlaying && Math.random() > 0.3) return; // ゲーム中以外は少し減らす
     const el = document.createElement('div');
     el.className = 'decoration';
-    const symbols = ['🌸', '✨', '🍃', '🍓', '🤍'];
+    const symbols = ['🌸', '✨', '🍃', '🤍'];
     el.textContent = symbols[Math.floor(Math.random() * symbols.length)];
     el.style.left = `${Math.random() * 100}vw`;
     
@@ -218,7 +304,7 @@ function createDecoration() {
 }
 setInterval(createDecoration, 1000);
 
-/* クリック時のキラキラ */
+/* クリック時（今回はキャッチ時）のキラキラ */
 function createSparkles(x, y) {
     for (let i = 0; i < 6; i++) {
         const span = document.createElement('span');
@@ -236,7 +322,7 @@ function createSparkles(x, y) {
         span.style.top = `${y}px`;
         
         ELEMENTS.playArea.appendChild(span);
-        setTimeout(() => span.remove(), 500);
+        setTimeout(() => { if (span.parentNode) span.remove(); }, 500);
     }
 }
 

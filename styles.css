@@ -124,7 +124,9 @@ h2 {
     transform: scale(1.3);
 }
 .white {
-    filter: sepia(0.8) hue-rotate(280deg) saturate(0.5) brightness(1.2);
+    filter: brightness(1.5) drop-shadow(0 0 10px gold);
+    position: relative;
+    z-index: 15;
 }
 .blue {
     filter: hue-rotate(220deg) saturate(2);
@@ -166,6 +168,32 @@ h2 {
     width: 100%;
     overflow: hidden;
     background: radial-gradient(circle, #fff, var(--bg-color));
+    cursor: none; /* ゲーム中はデフォルトカーソルを非表示 */
+}
+
+#basket {
+    position: absolute;
+    font-size: 4.5rem;
+    pointer-events: none;
+    z-index: 50;
+    /* マウスの先端にカゴの口が来るように調整 */
+    transform: translate(-50%, -20%);
+    filter: drop-shadow(0 5px 5px rgba(0,0,0,0.2));
+}
+
+.falling-entity {
+    position: absolute;
+    font-size: 3rem;
+    user-select: none;
+    pointer-events: none; /* 当たり判定はJSで行うため不要 */
+    transform-origin: center;
+    z-index: 10;
+}
+
+.falling-entity.bee {
+    font-size: 2.8rem;
+    filter: drop-shadow(0 0 5px red);
+    z-index: 20;
 }
 
 .strawberry-entity {
