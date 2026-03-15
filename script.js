@@ -229,20 +229,24 @@ function updateEntities() {
 
 function checkCollisions() {
     // カゴの判定領域 (マウスカーソル位置基準)
-    // カゴの中心(cursorX)から左右30px、上20px下20pxくらいを当たり判定とする
-    const catchRadius = 35;
     const basketCenterY = cursorY + 10;
     
     for (let i = fallingEntities.length - 1; i >= 0; i--) {
         const entity = fallingEntities[i];
         if (entity.isCaught) continue;
         
-        // 距離を計算（簡易的な円形判定）
-        const dx = entity.x - cursorX;
-        const dy = entity.y - basketCenterY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        // いちご等（エンティティ）の幅を考慮し、中心座標を算出
+        // font-size: 3rem (約48px) であるため、左端から+24pxした位置が中心
+        const entityCenterX = entity.x + 24;
+        const entityCenterY = entity.y + 24;
         
-        if (distance < catchRadius) {
+        // カゴ（cursorX/Y）との距離（X軸、Y軸）を計算
+        const dx = Math.abs(entityCenterX - cursorX);
+        const dy = Math.abs(entityCenterY - basketCenterY);
+        
+        // 横幅はカゴの半分強（縦横に少し余裕を持たせる）を当たり判定とする
+        // カゴは幅広なのでX軸の判定を広めに (dx < 45)、Y軸はシビアに (dy < 35)
+        if (dx < 45 && dy < 35) {
             // キャッチ成功（またはハチと衝突）
             handleCatch(entity, i);
         }
